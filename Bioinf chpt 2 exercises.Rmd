@@ -1,0 +1,219 @@
+---
+title: "R Bioinformatics Cookbook, Exercises"
+author: "Kristian Bragge"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Environment setup, set eval=false to run
+```{r, eval=FALSE}
+install.packages("dplyr")
+install.packages("fs")
+install.packages("readr")
+install.packages("tidyr")
+install.packages("stringr")
+install.packages("purrr")
+install.packages("danmaclean/rbioinfcookbook")
+```
+
+
+# Exercises
+## Chapter 2.
+### Recipe 1.
+```{r chp2pack}
+library(readr)
+filename <- fs::path_package("extdata","census_2021.csv",package="rbioinfcookbook")
+col_names = c(c("area_code","country","region","area_name","all_persons","under_4"),
+              paste0(
+                seq(5,82,by=5),
+                "_to_",
+                seq(9,89,by=5)),
+              c("over_90")
+              )
+
+col_types = cols(
+  area_code = col_character(),
+  country = col_factor(levels = c("England", "Wales")),
+  region = col_factor(levels = c("North East",
+                                 "Yorkshire Humber",
+                                 "East Midlands",
+                                 "West Midlands",
+                                 "East of England",
+                                 "London",
+                                 "South East",
+                                 "South West",
+                                 "Wales"), ordered = TRUE),
+  area_name = col_character(),
+  .default = col_number()
+)
+
+df <- read_csv(filename, skip = 8, col_names = col_names, col_types = col_types)
+```
+### Recipe 2.
+```{r}
+library(rbioinfcookbook)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+long_df <- census_df  |> 
+  rename("0_to_4" = "under_4", "90_to_120" = "over_90") |>
+  pivot_longer(
+    cols = contains("_to_"),
+    names_to = c("age_From","age_to"),
+    names_pattern = "(.*)_to_(.*)",
+    names_transform = list("age_from" = as.integer,
+                           age.to = as.integer),
+    values_to = "count"
+  )
+```
+
+### Recipe 3.
+```{r}
+library(rbioinfcookbook)
+library(tidyr)
+
+treatments |>
+  pivot_wider(names_from = measurement,
+              values_from = value)
+```
+### Recipe 4.
+```{r}
+library(rbioinfcookbook)
+library(dplyr)
+#terms to genes
+x <- left_join(mo_gene_exp, mo_terms, by=c('gene_id' = 'Gene stable ID'))
+
+#accession numbers
+y <- right_join(mo_go_acc, x, by = c('Gene stable ID' = 'gene_id'))
+
+#evidence
+z <- inner_join(y, mo_go_evidence, by = c('GO term accession' = 'GO term evidence code'))
+
+#direction comparison
+a <- right_join(x, mo_go_acc, by = c('gene_id' = 'Gene stable ID'))
+
+#stack
+mol_func <- filter(mo_go_evidence, `GO domain` == 'molecular_function')
+cell_comp <- filter(mo_go_evidence, `GO domain` == 'cellular_component')
+bind_rows(mol_func, cell_comp)
+
+#side by side
+small_mol_func <- head(mol_func, 15)
+small_cell_comp <- head(cell_comp, 15)
+bind_cols(small_mol_func, small_cell_comp)
+
+```
+
+
+### Recipe 5.
+```{r}
+library(rbioinfcookbook)
+library(stringr)
+
+ids <- str_extract(ath_seq_names, "^AT\\dG.*\\.\\d")
+
+description <- str_split(ath_seq_names, "\\|", simplify = TRUE)[,3] |>
+  str_trim()
+
+info <- str_split(ath_seq_names, "\\|", simplify = TRUE)[,4] |>
+  str_trim()
+
+chr <- str_match(info, "chr(\\d):(\\d+)-(\\d+)")
+
+strand_pos <- str_locate(info, "[FORWARD|REVERSE]")
+strand <- str_sub(info, start=strand_pos, end=strand_pos+1)
+
+lengths <- str_match(info, "LENGTH=(\\d+)$")[,2]
+
+results <- data.frame(
+  ids = ids,
+  description = description,
+  chromosome = as.integer(chr[,2]),
+  start = as.integer(chr[,3]),
+  end = as.integer(chr[,4]),
+  strand = strand,
+  length = as.integer(lengths)
+)
+```
+
+### Recipe 6.
+```{r}
+#1.
+library(dplyr)
+df <- data.frame(gene_id = c("gene1","gene2","gene3"),
+                 tissue1 = c(5.1,7.3,8.2),
+                 tissue2= c(4.8,6.1,9.5))
+
+df <- df |>mutate(log2_tissue1 = log2(tissue1),
+                  log2_tissue2 = log2(tissue2))
+#2.
+df |> mutate_if(is.numeric,log2)
+df |> mutate_at(vars(starts_with("tissue")), log2)
+
+#3.
+df <- data.frame(gene_id = c("gene1","gene2","gene3"),
+                 tissue1 = c(5.1,7.3,8.2),
+                 tissue2= c(4.8,6.1,9.5),
+                 tissue3=c(8.5,12.5,6.5))
+
+df <- df |>
+  rowwise() |>
+  mutate(mean = mean(c(tissue1,tissue2,tissue3)),
+         stdev = stdev(c(tissue1,tissue2,tissue3)))
+#4.
+df <- data.frame(gene_id = c("gene1","gene2","gene3"),
+                 tissue1_value = c(5.1,7.3,8.2),
+                 tissue1_pvalue = c(0.1,0.05,0.001),
+                 tissue2_value= c(4.8,6.1,9.5),
+                 tissue2_pvalue=c(0.03,0.04,0.001)) |>
+  tidyr::nest(-gene_id,.key="tissue")
+
+df <- df |> mutate(tissue=purrr::map(tissue, ~ mutate(.x, value_log2 = log2(.[1]),pvalue_log2 = log2(.[2])) ))
+#print(df$tissue)
+```
+### Recipe 7.
+```{r}
+chromosome_id <- c(1,1,1,2,2,3,3,3)
+gene_id <- c("A1","A2","A3","B1","B2","C1","C2","C3")
+strand <- c("forward","reverse","forward","forward","reverse","forward","forward","reverse")
+length <- c(2000,1500,3000,2500,2000,1000,2000,3000)
+genes_df <- data.frame(chromosome_id,gene_id,strand,length)
+#2.
+library(dplyr)
+genes_df |> group_by(chromosome_id) |> summarise(total_length = sum(length))
+#3.
+genes_df |> group_by(chromosome_id, strand) |> 
+  summarise(num_genes = n(),
+            avg_length = mean(length))
+#4.
+chromosome_id <- c(1,1,1,2,2,3,3,3)
+gene_id <- c("A1","A2","A3","B1","B2","C1","C2","C3")
+strand <- c("forward","reverse","forward","forward","reverse","forward","forward","reverse")
+length <- c(2000,1500,3000,2500,2000,1000,2000,3000)
+genes_df <- data.frame(chromosome_id,gene_id,strand,length)
+
+genes_df$samples <- list(data.frame(sample_id=1:2, expression=c(2,3)),
+                         data.frame(sample_id=1:3, expression=c(3,4,5)),
+                         data.frame(sample_id=1:2, expression=c(4,5)),
+                         data.frame(sample_id=1:3, expression=c(5,6,7)),
+                         data.frame(sample_id=1:2, expression=c(6,7)),
+                         data.frame(sample_id=1:2, expression=c(1,2)),
+                         data.frame(sample_id=1:2, expression=c(2,3)),
+                         data.frame(sample_id=1:2, expression=c(3,4))
+                         )
+genes_df |>
+  tidyr::unnest() |>
+  group_by(chromosome_id,strand) |>
+  summarise(mean_expression = mean(expression))
+
+```
+### Recipe 8.
+```{r}
+#skip
+```
