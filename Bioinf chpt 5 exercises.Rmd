@@ -1,0 +1,166 @@
+---
+title: "R Bioinformatics Cookbook, Exercises"
+author: "Kristian Bragge"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Environment setup, set eval=TRUE to run
+```{r, eval=FALSE}
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("multcomp")
+install.packages("rcompanion")
+install.packages("danmaclean/rbioinfcookbook")
+```
+
+
+# Exercises
+## Chapter 5.
+### Recipe 1.
+```{r }
+data("PlantGrowth")
+summary(PlantGrowth)
+
+```
+```{r }
+model_1 <- lm(weight~group, data = PlantGrowth)
+summary(model_1)
+plot(model_1, which=1)
+```
+
+### Recipe 2.
+```{r }
+library(rbioinfcookbook)
+summary(plant_growth_two)
+model_1 <- lm(weight ~group, data=plant_growth_two)
+summary(model_1)
+
+library(dplyr)
+
+group_means <- plant_growth_two |>
+  group_by(group) |>
+  summarize(mean_wt = mean(weight))
+
+group_means
+
+difference_in_means <- group_means$mean_wt[1] - group_means$mean_wt[2]
+difference_in_means
+
+
+```
+
+
+### Recipe 3.
+```{r }
+model_1 <- lm(weight~group, data = PlantGrowth)
+summary(model_1)
+library(multcomp)
+tested <- glht(model_1, linfct = mcp(group="Tukey"))
+summary(tested)
+
+```
+
+### Recipe 4.
+```{r }
+library(rbioinfcookbook)
+summary(expression)
+model_1 <- lm(Expression ~Treatment + Replicate, data=expression)
+summary(model_1)
+```
+```{r }
+library(multcomp)
+tested <- glht(model_1,
+                linfct = mcp(Replicate = "Tukey",
+                             Treatment = "Tukey"))
+summary(tested)
+
+```
+```{r }
+library(ggplot2)
+
+ggplot(expression) + 
+  aes(Treatment, Expression) +
+  geom_boxplot() + 
+  geom_jitter(aes(colour= Replicate))
+
+```
+
+### Recipe 5.
+```{r }
+library(rbioinfcookbook)
+summary(compost)
+
+interaction.plot(compost$compost, compost$supplement, compost$size,
+                xlab="kompost type", ylab="size", trace.label="supplement")
+
+```
+```{r }
+compost_int <- dplyr::mutate(compost, compost_supp=interaction(compost,supplement))
+model_1 <- lm(size~compost_supp, data=compost_int)
+summary(model_1)
+
+library(multcomp)
+tested <- glht(model_1, linfct=mcp(compost_supp = "Tukey"))
+summary(tested)
+```
+```{r }
+library(ggplot2)
+ggplot(compost) + 
+  aes(compost, size) +
+  geom_jitter(aes(colour = supplement), position=position_dodge(width=0.5))
+
+```
+
+
+### Recipe 6.
+```{r }
+library(rbioinfcookbook)
+library(dplyr)
+
+scores <- disease_scores |> transmute(
+  strain = as.factor(strain),
+  replicate = as.factor(replicate),
+  score = as.factor(score)
+)
+
+scores <- scores |> transmute(
+  score = factor(score, levels= c(seq(1:4)), ordered=TRUE),
+  rank_score = rank(score),
+  strain,replicate
+)
+
+model <- lm(rank_score ~strain, data = scores)
+library(multcomp)
+summary(glht(model, linfct = mcp(strain = "Tukey")))
+
+library(rcompanion)
+tabulated <- xtabs(frequency~treatment+side_effect, data = side_effects)
+
+tabulated
+pairwiseNominalIndependence(tabulated, method="fdr")
+```
+```{r }
+library(ggplot2)
+ggplot(side_effects) +
+  aes(treatment, side_effect) +
+  geom_point(aes(size=frequency))
+
+```
+
+
+### Recipe 7.
+```{r }
+library(ggplot2)
+str(txhousing)
+model <- lm(median ~ city+year+month, data=txhousing)
+new_val <- data.frame(city=c("Abilene"),year=c(2000),month=c(2))
+predict(model, newdata=new_val)
+predict(model,newdata=new_val,interval='predict')¨
+
+
+```
